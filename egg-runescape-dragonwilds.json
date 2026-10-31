@@ -1,0 +1,144 @@
+{
+    "_comment": "DO NOT EDIT: FILE GENERATED AUTOMATICALLY BY PTERODACTYL PANEL - PTERODACTYL.IO",
+    "meta": {
+        "version": "PTDL_v2",
+        "update_url": null
+    },
+    "exported_at": "2026-11-01T02:38:10+07:00",
+    "name": "RuneScape: Dragonwilds",
+    "author": "community@example.invalid",
+    "description": "RuneScape: Dragonwilds is a co-op survival RPG set in the world of RuneScape. Up to 6 players can explore, craft, build, and battle together on a dedicated server. The first-party minimum is 4 GiB RAM; 8 GiB is a conservative six-player allocation.",
+    "features": [
+        "steam_disk_space"
+    ],
+    "docker_images": {
+        "ghcr.io/pelican-eggs/steamcmd:debian (pinned amd64)": "ghcr.io/pelican-eggs/steamcmd:debian@sha256:ad309cbab24e211d2a973d0be8a92c957642a6d5b0b1d31f0cc561ff26f3048e"
+    },
+    "file_denylist": [],
+    "startup": "set -euo pipefail; game_port=\"{{SERVER_PORT}}\"; beacon_port=\"{{BEACON_PORT}}\"; validate_port() { local label=\"$1\" value=\"$2\"; if [[ ! \"${value}\" =~ ^[1-9][0-9]{3,4}$ ]] || ((10#${value} < 1024 || 10#${value} > 65535)); then echo \"${label} port is invalid; expected 1024-65535 without leading zeros.\" >&2; return 1; fi; }; validate_port Game \"${game_port}\"; validate_port Beacon \"${beacon_port}\"; if ((10#${game_port} == 10#${beacon_port})); then echo \"Game and beacon ports must be different UDP allocations.\" >&2; exit 1; fi; additional_args=\"{{ADDITIONAL_ARGS}}\"; case \"${additional_args,,}\" in *-port=*|*-beaconport=*) echo \"Additional arguments must not override game or beacon ports.\" >&2; exit 1;; esac; extra_args=(); if [[ -n \"${additional_args}\" ]]; then read -r -a extra_args <<< \"${additional_args}\"; fi; set -f; exec ./RSDragonwildsServer.sh -Port=\"${game_port}\" -BeaconPort=\"${beacon_port}\" -log -ini:Game:[/Script/Engine.GameSession]:MaxPlayers={{MAX_PLAYERS}} \"${extra_args[@]}\"",
+    "config": {
+        "files": "{\n    \"RSDragonwilds/Saved/Config/LinuxServer/DedicatedServer.ini\": {\n        \"parser\": \"ini\",\n        \"find\": {\n            \"[/Script/Dominion.DedicatedServerSettings].OwnerId\": \"{{server.build.env.OWNER_ID}}\",\n            \"[/Script/Dominion.DedicatedServerSettings].ServerName\": \"{{server.build.env.SERVER_NAME}}\",\n            \"[/Script/Dominion.DedicatedServerSettings].DefaultWorldName\": \"{{server.build.env.DEFAULT_WORLD_NAME}}\",\n            \"[/Script/Dominion.DedicatedServerSettings].AdminPassword\": \"{{server.build.env.ADMIN_PASSWORD}}\",\n            \"[/Script/Dominion.DedicatedServerSettings].WorldPassword\": \"{{server.build.env.WORLD_PASSWORD}}\",\n            \"[/Script/Dominion.DedicatedServerSettings].AdministratorList\": \"{{server.build.env.ADMIN_LIST}}\"\n        }\n    }\n}",
+        "startup": "{\n    \"done\": \"START SESSION - Success\"\n}",
+        "logs": "{}",
+        "stop": "^C"
+    },
+    "scripts": {
+        "installation": {
+            "script": "#!/bin/bash\nset -euo pipefail\numask 022\n\nexport HOME=/mnt/server\nreadonly STEAMCMD_URL=\"https://media.steampowered.com/client/steamcmd_linux.tar.gz\"\nreadonly STEAMCMD_SHA256=\"cebf0046bfd08cf45da6bc094ae47aa39ebf4155e5ede41373b579b8f1071e7c\"\nreadonly STEAMCMD_SIZE=\"2428561\"\nreadonly STEAMCMD_MAX_SIZE=\"8388608\"\nreadonly STEAMCMD_DIR=\"${HOME}/steamcmd\"\narchive=\"\"\n\nfail() {\n    printf 'ERROR: %s\\n' \"$*\" >&2\n    exit 1\n}\n\ncleanup() {\n    if [[ -n \"${archive}\" ]]; then\n        rm -f -- \"${archive}\"\n    fi\n}\ntrap cleanup EXIT\n\nSRCDS_APPID=\"${SRCDS_APPID:-}\"\n[[ \"${SRCDS_APPID}\" == \"4019830\" ]] || fail \"SRCDS_APPID must be exactly 4019830.\"\n\nrm -rf -- \"${STEAMCMD_DIR:?}\"\nmkdir -p \"${STEAMCMD_DIR}\" \"${HOME}/steamapps\"\narchive=\"$(mktemp \"${TMPDIR:-/tmp}/steamcmd_linux.XXXXXX.tar.gz\")\"\n\ncurl \\\n    --fail \\\n    --show-error \\\n    --location \\\n    --proto '=https' \\\n    --tlsv1.2 \\\n    --retry 3 \\\n    --retry-all-errors \\\n    --connect-timeout 20 \\\n    --max-time 300 \\\n    --max-filesize \"${STEAMCMD_MAX_SIZE}\" \\\n    --output \"${archive}\" \\\n    \"${STEAMCMD_URL}\"\n\nactual_size=\"$(stat -c '%s' \"${archive}\")\"\n[[ \"${actual_size}\" == \"${STEAMCMD_SIZE}\" ]] || fail \"SteamCMD archive size mismatch: expected ${STEAMCMD_SIZE}, got ${actual_size}.\"\nprintf '%s  %s\\n' \"${STEAMCMD_SHA256}\" \"${archive}\" | sha256sum --check --status || fail \"SteamCMD archive checksum mismatch.\"\n\ntar --extract --gzip --file \"${archive}\" --directory \"${STEAMCMD_DIR}\" --no-same-owner --no-same-permissions\nchmod +x \"${STEAMCMD_DIR}/steamcmd.sh\"\n\n\"${STEAMCMD_DIR}/steamcmd.sh\" \\\n    +@sSteamCmdForcePlatformType linux \\\n    +force_install_dir \"${HOME}\" \\\n    +login anonymous \\\n    +app_update \"${SRCDS_APPID}\" validate \\\n    +quit\n\nmanifest_field_is_unique_top_level() {\n    local path=\"$1\"\n    local key=\"$2\"\n    local expected=\"$3\"\n    LC_ALL=C awk -v wanted_key=\"${key}\" -v expected=\"${expected}\" '\n        function record_key(key, value) {\n            if (tolower(key) == wanted_key) {\n                total++\n                if (depth == 1) {\n                    top++\n                    top_value = value\n                }\n            }\n        }\n        function string_token(value, key) {\n            if (finished || invalid) {\n                invalid = 1\n                return\n            }\n            if (!pending) {\n                pending_key = value\n                pending = 1\n                return\n            }\n            key = pending_key\n            pending_key = \"\"\n            pending = 0\n            if (depth == 0) {\n                invalid = 1\n                return\n            }\n            record_key(key, value)\n        }\n        function open_object(key) {\n            if (finished || invalid || !pending) {\n                invalid = 1\n                return\n            }\n            key = pending_key\n            pending_key = \"\"\n            pending = 0\n            record_key(key, \"\")\n            if (depth == 0) {\n                if (root_seen || tolower(key) != \"appstate\") {\n                    invalid = 1\n                    return\n                }\n                root_seen = 1\n            }\n            depth++\n        }\n        function close_object() {\n            if (invalid || pending || depth <= 0) {\n                invalid = 1\n                return\n            }\n            depth--\n            if (depth == 0) finished = 1\n        }\n        BEGIN {\n            depth = 0\n            total = 0\n            top = 0\n            top_value = \"\"\n            pending_key = \"\"\n            pending = 0\n            root_seen = 0\n            finished = 0\n            invalid = 0\n            wanted_key = tolower(wanted_key)\n        }\n        {\n            line = $0\n            length_line = length(line)\n            index_line = 1\n            while (index_line <= length_line && !invalid) {\n                character = substr(line, index_line, 1)\n                next_character = substr(line, index_line + 1, 1)\n                if (character ~ /[[:space:]]/) {\n                    index_line++\n                } else if (character == \"/\" && next_character == \"/\") {\n                    break\n                } else if (character == \"{\") {\n                    open_object()\n                    index_line++\n                } else if (character == \"}\") {\n                    close_object()\n                    index_line++\n                } else if (character == \"\\\"\") {\n                    value = \"\"\n                    closed_quote = 0\n                    index_line++\n                    while (index_line <= length_line) {\n                        character = substr(line, index_line, 1)\n                        if (character == \"\\\\\") {\n                            index_line++\n                            if (index_line > length_line) {\n                                invalid = 1\n                                break\n                            }\n                            escaped = substr(line, index_line, 1)\n                            if (escaped == \"\\\"\" || escaped == \"\\\\\") {\n                                value = value escaped\n                            } else if (escaped == \"n\") {\n                                value = value \"\\n\"\n                            } else if (escaped == \"t\") {\n                                value = value \"\\t\"\n                            } else {\n                                invalid = 1\n                                break\n                            }\n                            index_line++\n                        } else if (character == \"\\\"\") {\n                            closed_quote = 1\n                            index_line++\n                            break\n                        } else {\n                            value = value character\n                            index_line++\n                        }\n                    }\n                    if (!closed_quote) invalid = 1\n                    if (!invalid) string_token(value)\n                } else {\n                    invalid = 1\n                }\n            }\n        }\n        END {\n            exit !(invalid == 0 && root_seen == 1 && finished == 1 && depth == 0 && pending == 0 && total == 1 && top == 1 && top_value == expected)\n        }\n    ' \"${path}\"\n}\n\nreadonly manifest=\"${HOME}/steamapps/appmanifest_${SRCDS_APPID}.acf\"\nreadonly launcher=\"${HOME}/RSDragonwildsServer.sh\"\nreadonly binary=\"${HOME}/RSDragonwilds/Binaries/Linux/RSDragonwildsServer-Linux-Shipping\"\n\n[[ -s \"${manifest}\" ]] || fail \"Steam app manifest is missing: ${manifest}\"\nmanifest_field_is_unique_top_level \"${manifest}\" appid 4019830 || fail \"Steam app manifest must identify App ID 4019830 exactly once at the AppState top level.\"\nmanifest_field_is_unique_top_level \"${manifest}\" StateFlags 4 || fail \"Steam app manifest must report StateFlags 4 exactly once at the AppState top level.\"\n[[ -s \"${launcher}\" ]] || fail \"Upstream Linux launcher is missing or empty: ${launcher}\"\n[[ -s \"${binary}\" ]] || fail \"Linux server binary is missing or empty: ${binary}\"\nchmod +x \"${launcher}\" \"${binary}\"\n\nmkdir -p \"${HOME}/.steam/sdk32\" \"${HOME}/.steam/sdk64\"\ninstall -m 0644 \"${STEAMCMD_DIR}/linux32/steamclient.so\" \"${HOME}/.steam/sdk32/steamclient.so\"\ninstall -m 0644 \"${STEAMCMD_DIR}/linux64/steamclient.so\" \"${HOME}/.steam/sdk64/steamclient.so\"\n\nprintf '\\nRuneScape: Dragonwilds dedicated server installed and verified.\\n'\n",
+            "container": "ghcr.io/pelican-eggs/installers:debian@sha256:3f0d9f085986cfe422c25428a044529f512de7aa8f0c9998cbdccdaf01647b27",
+            "entrypoint": "/bin/bash"
+        }
+    },
+    "variables": [
+        {
+            "name": "Automatic Updates",
+            "description": "Quickly checks for any server updates on startup, and updates if necessary. (1 Enable | 0 Disable)",
+            "env_variable": "AUTO_UPDATE",
+            "default_value": "1",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "boolean",
+            "field_type": "text"
+        },
+        {
+            "name": "[Required] Owner ID",
+            "description": "Your 32-character RuneScape: Dragonwilds Player ID, shown at the bottom of the in-game Settings menu. The server can boot with a placeholder, but ownership and owner-only controls require your real Player ID.",
+            "env_variable": "OWNER_ID",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|regex:/\\A[A-Za-z0-9]{32}\\z/",
+            "field_type": "text"
+        },
+        {
+            "name": "Default World Name",
+            "description": "The name of the world created on first startup. Players search for your server by this world name in the Public tab of the Worlds screen (case-sensitive). Uploaded worlds will ignore this setting and use their own name instead.",
+            "env_variable": "DEFAULT_WORLD_NAME",
+            "default_value": "Default World",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:16|regex:/\\A[^\\x00-\\x1F\\x7F]*\\z/",
+            "field_type": "text"
+        },
+        {
+            "name": "Server Name",
+            "description": "The name of your server. Displayed as \"Created By\" in the in-game server browser.",
+            "env_variable": "SERVER_NAME",
+            "default_value": "Dragonwilds",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:16|regex:/\\A[^\\x00-\\x1F\\x7F]*\\z/",
+            "field_type": "text"
+        },
+        {
+            "name": "Admin Password",
+            "description": "Anyone who knows this password can enter Server Management under Pause Menu > Settings and becomes an admin until the password changes. The generated configuration is at RSDragonwilds/Saved/Config/LinuxServer/DedicatedServer.ini.",
+            "env_variable": "ADMIN_PASSWORD",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|min:8|max:128|regex:/\\A[^\\x00-\\x1F\\x7F]*\\z/",
+            "field_type": "text"
+        },
+        {
+            "name": "World Password",
+            "description": "Optional password players must enter to join your server. Will supersede any password stored in the world. Can be left empty if you want anyone to be able to join your world.",
+            "env_variable": "WORLD_PASSWORD",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:128|regex:/\\A[^\\x00-\\x1F\\x7F]*\\z/",
+            "field_type": "text"
+        },
+        {
+            "name": "Administrator List",
+            "description": "Optional Unreal-style list of 32-character Player IDs that always receive administrator access, for example (ID1,ID2). Leave as () for no pre-authorized administrators.",
+            "env_variable": "ADMIN_LIST",
+            "default_value": "()",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|regex:/\\A\\((?:[A-Za-z0-9]{32}(?:,[A-Za-z0-9]{32})*)?\\)\\z/|max:1057",
+            "field_type": "text"
+        },
+        {
+            "name": "Beacon Port",
+            "description": "Required second UDP allocation used for the join beacon. It must be different from the primary game allocation. The upstream default is 8888.",
+            "env_variable": "BEACON_PORT",
+            "default_value": "8888",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|integer|between:1024,65535|regex:/\\A[1-9][0-9]{3,4}\\z/",
+            "field_type": "text"
+        },
+        {
+            "name": "Max Players",
+            "description": "Maximum number of players (1-6).",
+            "env_variable": "MAX_PLAYERS",
+            "default_value": "6",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|integer|between:1,6",
+            "field_type": "text"
+        },
+        {
+            "name": "Additional Launch Arguments",
+            "description": "Optional advanced arguments passed to the upstream Linux launcher. Shell metacharacters and quoting are rejected; leave blank unless a current Dragonwilds option is required.",
+            "env_variable": "ADDITIONAL_ARGS",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|regex:/\\A[A-Za-z0-9_.:,=+\\/\\[\\] -]*\\z/|max:256",
+            "field_type": "text"
+        },
+        {
+            "name": "[System] Dedicated Server App ID",
+            "description": "Steam App ID used for installation and updates.",
+            "env_variable": "SRCDS_APPID",
+            "default_value": "4019830",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "required|integer|in:4019830",
+            "field_type": "text"
+        }
+    ]
+}
