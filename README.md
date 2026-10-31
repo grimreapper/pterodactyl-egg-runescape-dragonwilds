@@ -54,6 +54,8 @@ Newer panel, Wings, and container-image versions should work with the PTDL v2 ex
 
 The release pins both executable container images by Linux/amd64 manifest digest. Updating either digest is a reviewed release change: resolve the tag again, inspect the new manifest, rerun the full test suite and live acceptance, then update the egg and documentation together.
 
+Verified release downloads, including the importable egg and `SHA256SUMS`, are available from [`v1.1.0`](https://github.com/grimreapper/pterodactyl-egg-runescape-dragonwilds/releases/tag/v1.1.0).
+
 ## Installation
 
 1. Download [`egg-runescape-dragonwilds.json`](egg-runescape-dragonwilds.json).
